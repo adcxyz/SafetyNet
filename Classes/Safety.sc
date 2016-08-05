@@ -27,8 +27,8 @@ Safety {
 		this.initSynthDefs(this.numChannels);
 		treeFunc = {
 			fork {
-				// always send here
-				synth.free;
+				// send here just to make sure we dont get buildup?
+				// synth.free;
 				synthDefs[defName].send(server);
 				server.sync;
 				synth = Synth.tail(RootNode(server), defName);
