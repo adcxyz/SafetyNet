@@ -11,6 +11,8 @@ and it keeps the signal within +-1 by clipping, limiting, or other methods.
 It is on by default so that newbie users are safe; can be turned off if desired.
 It puts itself at the tail of the rootnode; scope will be added after it, master volume goes before it.
 
+In link::Classes/ReplaceBadValues:: see esp. the method ugen.zap for suppressing bad numbers individually per synth. 
+
 First code examples:
 
 code::
