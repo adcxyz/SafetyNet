@@ -32,7 +32,7 @@ Safety {
 				synthDefs[defName].send(server);
 				server.sync;
 				synth = Synth.tail(RootNode(server), defName);
-				"% added synth %.".postf(this, defName.cs);
+				"% added synth %.\n".postf(this, defName.cs);
 			};
 		};
 		this.enable;
