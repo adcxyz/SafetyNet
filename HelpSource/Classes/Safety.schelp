@@ -11,7 +11,7 @@ and it keeps the signal within +-1 by clipping, limiting, or other methods.
 It is on by default so that newbie users are safe; can be turned off if desired.
 It puts itself at the tail of the rootnode; scope will be added after it, master volume goes before it.
 
-In link::Classes/ReplaceBadValues:: see esp. the method ugen.zap for suppressing bad numbers individually per synth. 
+In link::Classes/ReplaceBadValues:: see esp. the method ugen.zap for suppressing bad numbers individually per synth.
 
 First code examples:
 
@@ -138,5 +138,15 @@ x.set(\amp, 0.5); // fine again
 Safety(s).synth.set(\limit, 0.5); // set limit lower
 x.set(\amp, 5); // gets limited at 0.5;
 x.set(\amp, 0.5); // fine again
+
+// when multiple clients play on the same server, 
+// it may be preferable that each client runs a separate Safety 
+// on her own defaultGroup rather than on the shared RootNode:
+// set flag
+Safety.useRootNode = false;
+Safety(s).disable; // turn it off and on again,
+Safety(s).enable;  
+// ... and now it should be on the defaultGroup:
+s.queryAllNodes
 
 ::

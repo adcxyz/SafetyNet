@@ -1,6 +1,8 @@
 Safety {
 	classvar <all;
 	classvar <>defaultDefName = \safeClip;
+	classvar <>useRootNode = true;
+
 	var <server, <defName, <synthDefs, <treeFunc, <synth;
 
 	*initClass {
@@ -15,7 +17,7 @@ Safety {
 	storeArgs { ^[server.name] }
 	printOn { |stream| ^this.storeOn(stream) }
 
-	*new { |server, defName = (defaultDefName)|
+	*new { |server, defName = (defaultDefName), target|
 		if (all[server].notNil) { ^all[server] };
 		if (all[server.name].notNil) { ^all[server.name] };
 		^super.newCopyArgs(server, defName).init;
@@ -26,13 +28,18 @@ Safety {
 	init {
 		this.initSynthDefs(this.numChannels);
 		treeFunc = {
+			var target = if (useRootNode) {
+				RootNode(server)
+			} {
+				server.defaultGroup
+			};
 			fork {
 				// send here just to make sure we dont get buildup?
 				// synth.free;
 				synthDefs[defName].send(server);
 				server.sync;
-				synth = Synth.tail(RootNode(server), defName);
-				"% added synth %.\n".postf(this, defName.cs);
+				synth = Synth.tail(target, defName);
+				"% added synth to %.\n".postf(this, defName.cs);
 			};
 		};
 		this.enable;
