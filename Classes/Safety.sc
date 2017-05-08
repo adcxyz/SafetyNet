@@ -1,4 +1,5 @@
 Safety {
+
 	classvar <all;
 	classvar <>defaultDefName = \safeClip;
 	classvar <>useRootNode = true;
@@ -9,8 +10,8 @@ Safety {
 		all = ();
 		Class.initClassTree(Server);
 		Class.initClassTree(SynthDescLib);
-		Server.all.do { |serv|
-			Safety.all.put(serv.name, Safety(serv));
+		Server.all.do { |server|
+			Safety.all.put(server.name, Safety(server));
 		};
 	}
 
@@ -23,22 +24,18 @@ Safety {
 		^super.newCopyArgs(server, defName).init;
 	}
 
-	numChannels { ^server.numChannels }
+	numChannels { ^server.options.numOutputBusChannels }
+	asTarget { ^if (useRootNode) { RootNode(server) } { server } }
 
 	init {
 		this.initSynthDefs(this.numChannels);
 		treeFunc = {
-			var target = if (useRootNode) {
-				RootNode(server)
-			} {
-				server.defaultGroup
-			};
 			fork {
 				// send here just to make sure we dont get buildup?
 				// synth.free;
 				synthDefs[defName].send(server);
 				server.sync;
-				synth = Synth.tail(target, defName);
+				synth = Synth.tail(this, defName);
 				"% added synth to %.\n".postf(this, defName.cs);
 			};
 		};
