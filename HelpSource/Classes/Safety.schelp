@@ -1,15 +1,13 @@
 TITLE:: Safety
-summary:: protect users from risky sound signals
+summary:: protect ears and equipment from risky sound signals
 categories:: Utilities
 related:: Classes/ReplaceBadValues, Classes/Server
 
 DESCRIPTION::
 Safety protects users from risky sound signals in two respects:
-It replaces bad values before they leave the software and enter the sound device,
-and it keeps the signal within +-1 by clipping, limiting, or other methods.
+It replaces bad values before they leave the software and enter the sound device, and it keeps the signal within +-1 by clipping, limiting, or other methods.
 
-It is on by default so that newbie users are safe; can be turned off if desired.
-It puts itself at the tail of the rootnode; scope will be added after it, master volume goes before it.
+When the Safety quark is installed, it is on by default so that newbie users are safe; it can be turned off if desired. It puts itself at the tail of the rootnode; thus scope will be added after it, master volume goes before it.
 
 In link::Classes/ReplaceBadValues:: see esp. the method ugen.zap for suppressing bad numbers individually per synth.
 
@@ -17,27 +15,30 @@ First code examples:
 
 code::
 s.reboot; // Safety informs by posting:
-
-// -> Safety('localhost') added synth safeClip.
+// -> Safety('localhost') is running, using 'safeClip'.
 
 // Safety installs a Safety object for every server:
-Safety.all
-// which can be accessed with:
+Safety.all;
+// which can be accessed in three ways:
+Safety(s);
 Safety(\localhost);
+Safety.all[\localhost];
 
 // Safety reinstates protection when stooping all sounds with Cmd-Period:
 CmdPeriod.run;
-
-// -> also posts Safety('localhost') etc
+// -> posts Safety('localhost') etc
 
 // disable Safety if desired:
 Safety(s).disable;
+Safety(s).enabled;
 s.queryAllNodes; // gone
 CmdPeriod.run; // -> no post after  cmd-.
 
 // enable again
 Safety(s).enable;  // posts Safety... again
+Safety(s).enabled;
 CmdPeriod.run; // posts
+
 ::
 
 CLASSMETHODS::
@@ -45,8 +46,29 @@ CLASSMETHODS::
 METHOD:: all
 dict for all Safety objects
 
+METHOD:: enable, disable
+enable and disable all Safety objects at once
+
+METHOD:: addServers
+detect all present servers, and make Safety objects for them. When creating server by hand, run this method to use Safety on them too.
+
+METHOD:: synthDefFuncs
+dict for all synthDef-generating functions Safety can use
+
 METHOD:: defaultDefName
 get and set the name the default synthdef to use
+
+METHOD:: addSynthDefFunc
+add a function to create a safety synthDef by name.
+
+METHOD:: synthDefFor
+make a synthDef from a named synthDefFunc for a given number of channels
+
+METHOD:: useRootNode
+get and set whether to add safety synth to tail of rootnode or not.
+true by default. if false, safety synth will run after server.defaultGroup.
+
+PRIVATE:: initSynthDefFuncs, synthDefFor
 
 METHOD:: new
 make a new Safety, e.g. when creating a custom server.
@@ -54,37 +76,37 @@ argument:: server
 the server for which to make the safety
 argument:: defName
 the name of the synthdef it should use
+argument:: enable
+flag whether to enable this safety when making it.
 
 private:: initClass
 
 INSTANCEMETHODS::
 
 METHOD:: server
-the server for this safety
-
-METHOD:: initSynthDefs
-argument:: numChans
-remake list of default synthdefs for a given number of channels
-
-METHOD:: synthDefs
-the synthdefs which can be used
+the server of this safety
 
 METHOD:: defName
 get and set the name of the synthdef to use for this safety
 
-METHOD:: addDef
-add a synthDef that can be used by this safety
-
 METHOD:: synth
-the synth started by this safety
+the synth running for this safety
 
 METHOD:: treeFunc
 the function in ServerTree used to send safety synth when booting or after cmd-period.
 
 METHOD:: numChannels
+the number of output channels of safety.server
+
+METHOD:: enabled
+flag whether this safety is enabled
 
 METHOD:: enable, disable
 enable and disable safety.
+
+METHOD:: asTarget
+When Safety.useRootNode is true, this returns the server's rootnode;
+when false, it returns the server. This is used as target to whose tail the safety's synth will be added.
 
 private:: printOn, storeArgs, init
 
@@ -119,13 +141,13 @@ x.set(\freq, 550);      // recovers
 x.set(\amp, 5); // gets clipped
 // -------------- turn volume down on system output - gets softer
 x.set(\amp, 0.5); // fine again
-Safety(s).synth.set(\limit, 0.5); // set limit lower
+Safety(s).synth.set(\limit, 0.5); // set safety limit lower
 x.set(\amp, 5); // gets clipped at 0.5;
 x.set(\amp, 0.5); // fine again
 
 // test with other safeDef - safeLimit
 Safety(s).defName = \safeLimit;
-Safety(s).enable;
+Safety(s).enable(true);
 
 // same sources
 x = { RLPF.ar(PinkNoise.ar(1), \freq.kr(1000), 0.1, \amp.kr(0.25)) }.play;
@@ -139,14 +161,34 @@ Safety(s).synth.set(\limit, 0.5); // set limit lower
 x.set(\amp, 5); // gets limited at 0.5;
 x.set(\amp, 0.5); // fine again
 
-// when multiple clients play on the same server, 
-// it may be preferable that each client runs a separate Safety 
+// when multiple clients play on the same server,
+// it may be preferable that each client runs a separate Safety
 // on her own defaultGroup rather than on the shared RootNode:
 // set flag
 Safety.useRootNode = false;
 Safety(s).disable; // turn it off and on again,
-Safety(s).enable;  
-// ... and now it should be on the defaultGroup:
-s.queryAllNodes
+Safety(s).enable;
+// ... and now it run within the defaultGroup:
+s.queryAllNodes;
+
+
+// adding a custom Safety synthDefFunc:
+
+Safety.addSynthDefFunc(\safeClip2, { |numChans|
+	{ |limit=1|
+		// read the hardware output channel busses:
+		var mainOuts = In.ar(0, numChans);
+		// filter them for bad values
+		var safeOuts = ReplaceBadValues.ar(mainOuts);
+		// apply whatever custom limiting method
+		var limited = safeOuts.clip2(limit);
+		// write the safe and limited back to the output channels busses:
+		ReplaceOut.ar(0, limited);
+	}
+});
+
+Safety(s).defName_(\safeClip2);
+Safety(s).disable; // turn it off and on again,
+Safety(s).enable;  // should use safeClip2 now.
 
 ::

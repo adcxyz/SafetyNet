@@ -1,99 +1,133 @@
 Safety {
 
 	classvar <all;
+	classvar <synthDefFuncs;
 	classvar <>defaultDefName = \safeClip;
 	classvar <>useRootNode = true;
 
-	var <server, <defName, <synthDefs, <treeFunc, <synth;
+	var <server, <defName, <treeFunc, <synth, <enabled = false;
 
 	*initClass {
 		all = ();
 		Class.initClassTree(Server);
 		Class.initClassTree(SynthDescLib);
+		this.initSynthDefFuncs;
+		this.addServers;
+	}
+
+	*initSynthDefFuncs {
+		synthDefFuncs = (
+			\safeClip: { |numChans|  { |limit=1|
+				var mainOuts = In.ar(0, numChans);
+				var safeOuts = ReplaceBadValues.ar(mainOuts);
+				var limited = safeOuts.clip2(limit);
+				ReplaceOut.ar(0, limited);
+			} },
+			\safeSoft: { |numChans| { |limit=1|
+				var mainOuts = In.ar(0, numChans);
+				var safeOuts = ReplaceBadValues.ar(mainOuts);
+				var limited = safeOuts.softclip * limit;
+				ReplaceOut.ar(0, limited);
+			} },
+			\safeTanh: { |numChans| { |limit=1|
+				var mainOuts = In.ar(0, numChans);
+				var safeOuts = ReplaceBadValues.ar(mainOuts);
+				var limited = safeOuts.tanh * limit;
+				ReplaceOut.ar(0, limited);
+			} },
+			\safeLimit: { |numChans| { |limit=1|
+				var mainOuts = In.ar(0, numChans);
+				var safeOuts = ReplaceBadValues.ar(mainOuts);
+				var limited = Limiter.ar(safeOuts, limit);
+				ReplaceOut.ar(0, limited);
+			} }
+		);
+	}
+
+	*synthDefFor { |name, numChans = 2|
+		if (synthDefFuncs[name].isNil) { ^nil };
+		^SynthDef(name, synthDefFuncs[name].value(numChans));
+	}
+
+	*addSynthDefFunc { |defName, func|
+		// dont .add def here, numChans may differ for each server
+		synthDefFuncs.put(defName, func);
+	}
+
+	*addServers {
+		// only adds new Safety objects for new servers
 		Server.all.do { |server|
 			Safety.all.put(server.name, Safety(server));
 		};
 	}
 
+	*enable { all.do(_.enable) }
+	*disable { all.do(_.disable) }
+
+
+	*new { |server, defName = (defaultDefName), enable = false|
+		if (all[server].notNil) { ^all[server] };
+		if (all[server.name].notNil) { ^all[server.name] };
+		^super.newCopyArgs(server, defName).init(true);
+	}
+
+
 	storeArgs { ^[server.name] }
 	printOn { |stream| ^this.storeOn(stream) }
 
-	*new { |server, defName = (defaultDefName), target|
-		if (all[server].notNil) { ^all[server] };
-		if (all[server.name].notNil) { ^all[server.name] };
-		^super.newCopyArgs(server, defName).init;
-	}
-
 	numChannels { ^server.options.numOutputBusChannels }
-	asTarget { ^if (useRootNode) { RootNode(server) } { server } }
+	asTarget { ^if (useRootNode) { RootNode(server) } { server.defaultGroup } }
 
-	init {
-		this.initSynthDefs(this.numChannels);
+	init { |enable|
 		treeFunc = {
-			fork {
-				// send here just to make sure we dont get buildup?
-				// synth.free;
-				synthDefs[defName].send(server);
+			forkIfNeeded {
+				server.makeBundle(nil, {
+					if (synth.notNil) {
+						server.sendMsg("/error", 0);
+						synth.free;
+						server.sendMsg("/error", 1);
+					};
+				});
+				Safety.synthDefFor(defName).send(server);
 				server.sync;
 				synth = Synth.tail(this, defName);
-				"% added synth to %.\n".postf(this, defName.cs);
-			};
+				enabled = true;
+				"% is running, using %.\n".postf(this, defName.cs);
+			}
 		};
-		this.enable;
+
+		if (enable) { this.enable; };
 	}
 
-	enable {
-		ServerTree.add(treeFunc, server);
-		if (server.serverRunning) { treeFunc.value };
-	}
-	disable {
-		synth.free;
-		synth = nil;
-		ServerTree.remove(treeFunc, server)
-	}
+	enable { |remake = false|
 
-	defName_ { |name|
-		if (synthDefs[name].notNil) {
-			defName = name;
+		if (remake) { this.disable };
+
+		if (enabled) {
+			"% enabled already.\n".postf(this);
 			^this
 		};
 
-		"%: no synthdef % found - keeping %.\n".postf(this, name, defName);
+		ServerTree.add(treeFunc, server);
+		if (server.serverRunning) { treeFunc.value };
+		enabled  = true;
+		"% enabled.\n".postf(this);
 	}
 
-	addDef { |synthDef|
-		// dont .add def here, numChans may differ for each server
-		synthDefs.put(synthDef.name, synthDef);
+	disable {
+		synth.free;
+		synth = nil;
+		ServerTree.remove(treeFunc, server);
+		enabled = false;
+		"% disabled.\n".postf(this);
 	}
 
-	initSynthDefs { |numChans|
-		synthDefs = ();
-		[
-			SynthDef(\safeClip, { |limit=1|
-				var mainOuts = In.ar(0, numChans);
-				var safeOuts = ReplaceBadValues.ar(mainOuts);
-				var limited = safeOuts.clip2(limit);
-				ReplaceOut.ar(0, limited);
-			}),
-			SynthDef(\safeSoft, { |limit=1|
-				var mainOuts = In.ar(0, numChans);
-				var safeOuts = ReplaceBadValues.ar(mainOuts);
-				var limited = safeOuts.softclip * limit;
-				ReplaceOut.ar(0, limited);
-			}),
-			SynthDef(\safeTanh, { |limit=1|
-				var mainOuts = In.ar(0, numChans);
-				var safeOuts = ReplaceBadValues.ar(mainOuts);
-				var limited = safeOuts.tanh * limit;
-				ReplaceOut.ar(0, limited);
-			});
-			// introduces 0.01 * 2 sec latency ...
-			SynthDef(\safeLimit, { |limit=1|
-				var mainOuts = In.ar(0, numChans);
-				var safeOuts = ReplaceBadValues.ar(mainOuts);
-				var limited = Limiter.ar(safeOuts, limit);
-				ReplaceOut.ar(0, limited);
-			})
-		].do { |def| this.addDef(def) };
+	defName_ { |name|
+		if (synthDefFuncs[name].isNil) {
+			"%: no synthDef found for - keeping %.\n".postf(this, name.cs, defName);
+			^this
+		};
+		defName = name;
 	}
 }
+
