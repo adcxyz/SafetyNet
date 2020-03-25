@@ -5,7 +5,8 @@ Safety {
 	classvar <>defaultDefName = \safeClip;
 	classvar <>useRootNode = true;
 
-	var <server, <defName, <treeFunc, <synth, <enabled = false;
+	var <server, <defName, <numChannels, <enabled;
+	var <treeFunc, <synth;
 
 	*initClass {
 		all = ();
@@ -44,9 +45,9 @@ Safety {
 		);
 	}
 
-	*synthDefFor { |name, numChans = 2|
-		if (synthDefFuncs[name].isNil) { ^nil };
-		^SynthDef(name, synthDefFuncs[name].value(numChans));
+	*synthDefFor { |defName, numChans = 2|
+		if (synthDefFuncs[defName].isNil) { ^nil };
+		^SynthDef((defName ++ "_" ++ numChans).asSymbol, synthDefFuncs[defName].value(numChans));
 	}
 
 	*addSynthDefFunc { |defName, func|
@@ -65,21 +66,21 @@ Safety {
 	*disable { all.do(_.disable) }
 
 
-	*new { |server, defName = (defaultDefName), enable = false|
+	*new { |server, defName = (defaultDefName), enable = true, numChannels|
 		if (all[server].notNil) { ^all[server] };
 		if (all[server.name].notNil) { ^all[server.name] };
-		^super.newCopyArgs(server, defName).init(true);
+		^super.newCopyArgs(server, defName, numChannels).init;
 	}
-
 
 	storeArgs { ^[server.name] }
 	printOn { |stream| ^this.storeOn(stream) }
 
-	numChannels { ^server.options.numOutputBusChannels }
 	asTarget { ^if (useRootNode) { RootNode(server) } { server.defaultGroup } }
 
-	init { |enable|
+	init {
 		treeFunc = {
+			var numChans = numChannels ?? { server.options.numOutputBusChannels };
+			var synDef = Safety.synthDefFor(defName, numChans);
 			forkIfNeeded {
 				server.makeBundle(nil, {
 					if (synth.notNil) {
@@ -88,15 +89,16 @@ Safety {
 						server.sendMsg("/error", 1);
 					};
 				});
-				Safety.synthDefFor(defName).send(server);
+				synDef.send(server);
 				server.sync;
-				synth = Synth.tail(this, defName);
+				synth = Synth.tail(this, synDef.name);
 				enabled = true;
-				"% is running, using %.\n".postf(this, defName.cs);
+				"% is running, using %.\n".postf(this, synDef.name.cs);
 			}
 		};
 
-		if (enable) { this.enable; };
+		enabled = false;
+		this.enable;
 	}
 
 	enable { |remake = false|
@@ -122,12 +124,27 @@ Safety {
 		"% disabled.\n".postf(this);
 	}
 
+	numChannels_ { |num|
+		if (numChannels == num) { ^this };
+		if (num < 1) {
+			"Safety: illegal numChannels %.\n".postf(num);
+			^this
+		};
+		numChannels = num;
+		if (enabled and: server.serverRunning) {
+			this.enable(true);
+		};
+	}
+
 	defName_ { |name|
 		if (synthDefFuncs[name].isNil) {
 			"%: no synthDef found for - keeping %.\n".postf(this, name.cs, defName);
 			^this
 		};
 		defName = name;
+		if (server.serverRunning) {
+			this.enable(true);
+		}
 	}
 }
 
