@@ -15,20 +15,20 @@ First code examples:
 
 code::
 s.reboot; // Safety informs by posting:
-// -> Safety('localhost') is running, using 'safeClip'.
+// -> Safety('localhost') is running, using 'safeClip_2' or similar.
 
-// Safety installs a Safety object for every server:
+// Safety installs a Safety object for every known server:
 Safety.all;
 // which can be accessed in three ways:
 Safety(s);
 Safety(\localhost);
 Safety.all[\localhost];
 
-// Safety reinstates protection when stooping all sounds with Cmd-Period:
+// Safety reinstates protection when stopping all sounds with Cmd-Period:
 CmdPeriod.run;
 // -> posts Safety('localhost') etc
 
-// disable Safety if desired:
+// Safety can be disabled if desired:
 Safety(s).disable;
 Safety(s).enabled;
 s.queryAllNodes; // gone
@@ -38,6 +38,31 @@ CmdPeriod.run; // -> no post after  cmd-.
 Safety(s).enable;  // posts Safety... again
 Safety(s).enabled;
 CmdPeriod.run; // posts
+s.queryAllNodes;
+
+// Setting number of channels:
+// by default, a Safety has no numChannels value:
+Safety(s).numChannels // -> nil
+// then, it uses it's server's options.numOutputBusChannels
+// which is 2 by default
+s.options.numOutputBusChannels;
+// same as the "2" in "safeClip_2"
+CmdPeriod.run;
+// When you set a Safety's numChannels, these will be used:
+s.options.numOutputBusChannels = 8;
+CmdPeriod.run; // now uses "safeClip_8"
+
+
+// Choosing protection mode by ssetting defName
+// Safety has 4 modes in its synthdeffuncs dictionary:
+// \safeClip uses .clip(1.0) clipping
+// \safeSoft uses .softclip distortion
+// \safeTanh uses .tanh distortion
+// \safeLimit uses a Limiter.ar
+// you can add your own functions here:
+Safety.synthDefFuncs;
+// and change the defName like this:
+Safety(s).defName = \safeLimit;
 
 ::
 
@@ -71,13 +96,16 @@ true by default. if false, safety synth will run after server.defaultGroup.
 PRIVATE:: initSynthDefFuncs, synthDefFor
 
 METHOD:: new
-make a new Safety, e.g. when creating a custom server.
+make a new Safety, needed only when creating a custom server.
 argument:: server
 the server for which to make the safety
 argument:: defName
 the name of the synthdef it should use
 argument:: enable
 flag whether to enable this safety when making it.
+argument:: numChannels
+sets number of output channels to protect by Safety.
+Only needed if different from s.options.numOutputBusChannels.
 
 private:: initClass
 
@@ -117,41 +145,47 @@ code::
 
 // Tests - see where Safety goes in the node tree :
 s.boot;
-s.queryAllNodes;   // safety is there
+s.plotTree;   // safety is there
 
 // add a source
-x = { RLPF.ar(PinkNoise.ar(1), \freq.kr(1000), 0.1, \amp.kr(0.25)) }.play;
-s.queryAllNodes;  // temp before safety
+x = { RLPF.ar(Impulse.ar(300), \freq.kr(1000), 0.1, \amp.kr(0.1)) }.play;
 
+// scope goes after safety:
 s.scope;
-s.queryAllNodes; // correct: safety, then scope
-
-s.volume.volume = 0.2;
-s.queryAllNodes; // correct: vol, safety, scope
+// correct order: vol, safety, scope
+s.volume.volume = -2;
 
 x.set(\freq, -1.sqrt);  // signal gets bad -> mutes and posts info
 x.set(\freq, 550);      // recovers
 
 // try with second source
-y = { SinOsc.ar([220, 330], 0, 0.2) }.play;
+y = { SinOsc.ar([220, 330], 0, \amp.kr(0.1)) }.play;
 x.set(\freq, -1.sqrt);  // signal on ch 1 goes bad -> silent, ch2 remains
 x.set(\freq, 550);      // recovers
+x.free; y.free;
 
+
+/// test switching modes of volume limiting:
+Safety(s).defName = \safeClip;
+// remake scope to add it after safety,
+// and set yZoom so you see the clip limit
+s.scope(zoom: 1).yZoom_(0.9);
+// make a sound with amp from 0 to 4
+y = { SinOsc.ar([220, 330], 0, LFSaw.kr(0.3, 0, 2, 2)) }.play;
 // test limiting: now with safeClip
-x.set(\amp, 5); // gets clipped
-// -------------- turn volume down on system output - gets softer
-x.set(\amp, 0.5); // fine again
-Safety(s).synth.set(\limit, 0.5); // set safety limit lower
-x.set(\amp, 5); // gets clipped at 0.5;
-x.set(\amp, 0.5); // fine again
+y.set(\amp, 2); // gets clipped
+y.set(\amp, 5); // gets clipped
 
-// test with other safeDef - safeLimit
+Safety(s).defName = \safeSoft;
+s.scope;
 Safety(s).defName = \safeLimit;
-Safety(s).enable(true);
+s.scope;
+Safety(s).defName = \safeTanh;
+s.scope;
+y.free;
 
-// same sources
-x = { RLPF.ar(PinkNoise.ar(1), \freq.kr(1000), 0.1, \amp.kr(0.25)) }.play;
-y = { SinOsc.ar([220, 330], 0, 0.2) }.play;
+// -------------- turn volume down on system output - gets softer
+
 
 x.set(\freq, -1.sqrt);  // signal on ch 1 goes bad -> silent, ch2 remains
 x.set(\freq, 550);      // recovers
@@ -167,14 +201,13 @@ x.set(\amp, 0.5); // fine again
 // set flag
 Safety.useRootNode = false;
 Safety(s).disable; // turn it off and on again,
-Safety(s).enable;
+Safety(s).enable(true);
 // ... and now it run within the defaultGroup:
-s.queryAllNodes;
-
+s.plotTree;
 
 // adding a custom Safety synthDefFunc:
 
-Safety.addSynthDefFunc(\safeClip2, { |numChans|
+Safety.addSynthDefFunc(\mySafeClip, { |numChans|
 	{ |limit=1|
 		// read the hardware output channel busses:
 		var mainOuts = In.ar(0, numChans);
@@ -187,8 +220,6 @@ Safety.addSynthDefFunc(\safeClip2, { |numChans|
 	}
 });
 
-Safety(s).defName_(\safeClip2);
-Safety(s).disable; // turn it off and on again,
-Safety(s).enable;  // should use safeClip2 now.
+Safety(s).defName_(\mySafeClip);
 
 ::
