@@ -4,9 +4,11 @@ Safety {
 	classvar <synthDefFuncs;
 	classvar <>defaultDefName = \safeClip;
 	classvar <>useRootNode = true;
+	classvar <classLimit = 1.0;
 
 	var <server, <defName, <numChannels, <enabled;
 	var <treeFunc, <synth;
+	var <limit;
 
 	*initClass {
 		all = ();
@@ -18,30 +20,42 @@ Safety {
 
 	*initSynthDefFuncs {
 		synthDefFuncs = (
-			\safeClip: { |numChans|  { |limit=1|
-				var mainOuts = In.ar(0, numChans);
-				var safeOuts = ReplaceBadValues.ar(mainOuts);
-				var limited = safeOuts.clip2(limit);
-				ReplaceOut.ar(0, limited);
-			} },
-			\safeSoft: { |numChans| { |limit=1|
-				var mainOuts = In.ar(0, numChans);
-				var safeOuts = ReplaceBadValues.ar(mainOuts);
-				var limited = safeOuts.softclip * limit;
-				ReplaceOut.ar(0, limited);
-			} },
-			\safeTanh: { |numChans| { |limit=1|
-				var mainOuts = In.ar(0, numChans);
-				var safeOuts = ReplaceBadValues.ar(mainOuts);
-				var limited = safeOuts.tanh * limit;
-				ReplaceOut.ar(0, limited);
-			} },
-			\safeLimit: { |numChans| { |limit=1|
-				var mainOuts = In.ar(0, numChans);
-				var safeOuts = ReplaceBadValues.ar(mainOuts);
-				var limited = Limiter.ar(safeOuts, limit);
-				ReplaceOut.ar(0, limited);
-			} }
+			\safeClip: { |numChans, limit = 1|
+				{
+					var limitCtl = \limit.kr(limit);
+					var mainOuts = In.ar(0, numChans);
+					var safeOuts = ReplaceBadValues.ar(mainOuts);
+					var limited = safeOuts.clip2(limitCtl);
+					ReplaceOut.ar(0, limited);
+				}
+			},
+			\safeSoft: { |numChans, limit=1|
+				{
+					var limitCtl = \limit.kr(limit);
+					var mainOuts = In.ar(0, numChans);
+					var safeOuts = ReplaceBadValues.ar(mainOuts);
+					var limited = safeOuts.softclip * limitCtl;
+					ReplaceOut.ar(0, limited);
+				}
+			},
+			\safeTanh: { |numChans, limit=1|
+				{
+					var limitCtl = \limit.kr(limit);
+					var mainOuts = In.ar(0, numChans);
+					var safeOuts = ReplaceBadValues.ar(mainOuts);
+					var limited = safeOuts.tanh * limitCtl;
+					ReplaceOut.ar(0, limited);
+				}
+			},
+			\safeLimit: { |numChans, limit=1|
+				{
+					var limitCtl = \limit.kr(limit);
+					var mainOuts = In.ar(0, numChans);
+					var safeOuts = ReplaceBadValues.ar(mainOuts);
+					var limited = Limiter.ar(safeOuts, limitCtl);
+					ReplaceOut.ar(0, limited);
+				}
+			}
 		);
 	}
 
@@ -65,6 +79,12 @@ Safety {
 	*enable { all.do(_.enable) }
 	*disable { all.do(_.disable) }
 
+	*limit { ^classLimit }
+
+	*setLimit { |val = 1.0|
+		classLimit = val.clip(0, 1);
+		all.do(_.setLimit(classLimit));
+	}
 
 	*new { |server, defName = (defaultDefName), enable = true, numChannels|
 		if (all[server].notNil) { ^all[server] };
@@ -81,6 +101,7 @@ Safety {
 		treeFunc = {
 			var numChans = numChannels ?? { server.options.numOutputBusChannels };
 			var synDef = Safety.synthDefFor(defName, numChans);
+
 			forkIfNeeded {
 				server.makeBundle(nil, {
 					if (synth.notNil) {
@@ -89,12 +110,14 @@ Safety {
 						server.sendMsg("/error", 1);
 					};
 				});
+
 				synDef.send(server);
 				server.sync;
 				synth = Synth.tail(this, synDef.name);
-				enabled = true;
-				"% is running, using %.\n".postf(this, synDef.name.cs);
-			}
+			};
+
+			enabled = true;
+			"% is running, using %.\n".postf(this, synDef.name.cs);
 		};
 
 		enabled = false;
@@ -122,6 +145,13 @@ Safety {
 		ServerTree.remove(treeFunc, server);
 		enabled = false;
 		"% disabled.\n".postf(this);
+	}
+
+	setLimit { |val|
+		limit = val.clip(0, 1);
+		if (synth.notNil) {
+			synth.set(\limit, limit);
+		}
 	}
 
 	numChannels_ { |num|

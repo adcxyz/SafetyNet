@@ -5,9 +5,9 @@ related:: Classes/ReplaceBadValues, Classes/Server
 
 DESCRIPTION::
 Safety protects users from risky sound signals in two respects:
-It replaces bad values before they leave the software and enter the sound device, and it keeps the signal within +-1 by clipping, limiting, or other methods.
+It replaces bad values before they leave the software and enter the sound device, and it keeps the signal within +-1 (or a user-set lower limit) given by clipping, limiting, or other methods.
 
-When the Safety quark is installed, it is on by default so that newbie users are safe; it can be turned off if desired. It puts itself at the tail of the rootnode; thus scope will be added after it, master volume goes before it.
+When the Safety quark is installed, it is on by default so that newbie users are safe; it can be turned off if desired. It puts itself at the tail of the rootnode; thus scope will be added after it, and master volume goes before it.
 
 In link::Classes/ReplaceBadValues:: see esp. the method ugen.zap for suppressing bad numbers individually per synth.
 
@@ -40,7 +40,7 @@ Safety(s).enabled;
 CmdPeriod.run; // posts
 s.queryAllNodes;
 
-// Setting number of channels:
+// Setting the number of channels:
 // by default, a Safety has no numChannels value:
 Safety(s).numChannels // -> nil
 // then, it uses it's server's options.numOutputBusChannels
@@ -63,6 +63,27 @@ CmdPeriod.run; // now uses "safeClip_8"
 Safety.synthDefFuncs;
 // and change the defName like this:
 Safety(s).defName = \safeLimit;
+
+/// Set the general Safety limit level
+// - sets limit in all Safety objects:
+Safety.setLimit(0.8);
+Safety.limit;
+Safety(s).limit;
+
+// set individual limit for a Safety:
+Safety(\localhost).setLimit(0.5);
+
+// test that the set limit kicks in
+s.volume = -1;
+ // play sound at full level +-1
+{ SinOsc.ar([220, 330]) }.play;
+s.plotTree;
+s.scope;
+
+// test setting general limit for all Safetys
+Safety.setLimit(0.2)
+// and individual limit for Safety(s)
+Safety(s).setLimit(0.8);
 
 ::
 
@@ -155,6 +176,7 @@ s.scope;
 // correct order: vol, safety, scope
 s.volume.volume = -2;
 
+/////////// TEST BAD SIGNALS:
 x.set(\freq, -1.sqrt);  // signal gets bad -> mutes and posts info
 x.set(\freq, 550);      // recovers
 
@@ -191,7 +213,7 @@ x.set(\freq, -1.sqrt);  // signal on ch 1 goes bad -> silent, ch2 remains
 x.set(\freq, 550);      // recovers
 x.set(\amp, 5); // gets limited
 x.set(\amp, 0.5); // fine again
-Safety(s).synth.set(\limit, 0.5); // set limit lower
+Safety(s).setLimit(0.5); // set limit lower
 x.set(\amp, 5); // gets limited at 0.5;
 x.set(\amp, 0.5); // fine again
 
@@ -206,20 +228,23 @@ Safety(s).enable(true);
 s.plotTree;
 
 // adding a custom Safety synthDefFunc:
+// this one uses fold2, which distorts quite dramatically:
 
-Safety.addSynthDefFunc(\mySafeClip, { |numChans|
+Safety.addSynthDefFunc(\mySafeFold, { |numChans|
 	{ |limit=1|
 		// read the hardware output channel busses:
 		var mainOuts = In.ar(0, numChans);
 		// filter them for bad values
 		var safeOuts = ReplaceBadValues.ar(mainOuts);
 		// apply whatever custom limiting method
-		var limited = safeOuts.clip2(limit);
+		var limited = safeOuts.fold2(limit);
 		// write the safe and limited back to the output channels busses:
 		ReplaceOut.ar(0, limited);
 	}
 });
 
-Safety(s).defName_(\mySafeClip);
+Safety(s).defName_(\mySafeFold);
+// and back to harmless limiter
+Safety(s).defName_(\safeLimit);
 
 ::
