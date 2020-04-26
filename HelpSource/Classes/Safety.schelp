@@ -53,8 +53,8 @@ s.options.numOutputBusChannels = 8;
 CmdPeriod.run; // now uses "safeClip_8"
 
 
-// Choosing protection mode by ssetting defName
-// Safety has 4 modes in its synthdeffuncs dictionary:
+// Choosing protection mode by setting defName
+// Safety has 4 modes in its synthDefFuncs dictionary:
 // \safeClip uses .clip(1.0) clipping
 // \safeSoft uses .softclip distortion
 // \safeTanh uses .tanh distortion
@@ -162,6 +162,30 @@ private:: printOn, storeArgs, init
 EXAMPLES::
 
 code::
+
+
+(
+// adding a custom synthDefFunc -
+// contributed by holaglen@gmail.com
+Safety.addSynthDefFunc(\safeLimitNotify, { |numChans, limit=1|
+	{
+		var limitCtl = \limit.kr(limit).abs;
+		var mainOuts = In.ar(0, numChans);
+		var safeOuts = ReplaceBadValues.ar(mainOuts);
+		var resetTrig = Impulse.ar(0.5);
+		var peak = Peak.ar(safeOuts * (1 - resetTrig), resetTrig);
+		var maxPeak = peak.reduce(\max);
+		var delayMaxPeak = Delay1.ar(maxPeak);
+		var overTrig = delayMaxPeak > limitCtl;
+		var limited = Limiter.ar(safeOuts, limitCtl);
+		(delayMaxPeak / limitCtl).ampdb.poll((delayMaxPeak > maxPeak) * overTrig, "Audio peak exceeded limit by dB");
+		ReplaceOut.ar(0, limited);
+	}
+});
+)
+
+// tell all Safety objects to use it by default:
+Safety.defaultDefName = \safeLimitNotify;
 
 
 // Tests - see where Safety goes in the node tree :
