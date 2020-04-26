@@ -86,7 +86,7 @@ Safety {
 		all.do(_.setLimit(classLimit));
 	}
 
-	*new { |server, defName = (defaultDefName), enable = true, numChannels|
+	*new { |server, defName, enable = true, numChannels|
 		if (all[server].notNil) { ^all[server] };
 		if (all[server.name].notNil) { ^all[server.name] };
 		^super.newCopyArgs(server, defName, numChannels).init;
@@ -100,7 +100,7 @@ Safety {
 	init {
 		treeFunc = {
 			var numChans = numChannels ?? { server.options.numOutputBusChannels };
-			var synDef = Safety.synthDefFor(defName, numChans);
+			var synDef = Safety.synthDefFor(defName ? defaultDefName, numChans);
 
 			forkIfNeeded {
 				server.makeBundle(nil, {
