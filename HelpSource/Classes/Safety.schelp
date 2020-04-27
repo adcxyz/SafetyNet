@@ -165,8 +165,9 @@ code::
 
 
 (
-// adding a custom synthDefFunc -
-// contributed by holaglen@gmail.com
+// example for adding a custom synthDefFunc:
+// this one posts when Limiter goes into action.
+// kindly contributed by Glen Fraser (@totalgee on GitHub)
 Safety.addSynthDefFunc(\safeLimitNotify, { |numChans, limit=1|
 	{
 		var limitCtl = \limit.kr(limit).abs;
