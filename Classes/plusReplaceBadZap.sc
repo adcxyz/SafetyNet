@@ -12,7 +12,7 @@
 	zap { |sub = 0|
 		sub = sub.asArray;
 		^this.collect { |item, i|
-			item.zapBad(sub.wrapAt(i));
+			item.zap(sub.wrapAt(i));
 		}
 	}
 }
