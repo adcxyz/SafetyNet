@@ -2,5 +2,6 @@
 	\name: 			"SafetyNet",
 	\summary:		"Protects users from dangerous audio signals.",
 	\author: 		"Alberto de Campo",
-	\since: 		"2016"
+	\since: 		"2016",
+	\schelp: 		"Safety"
 )
